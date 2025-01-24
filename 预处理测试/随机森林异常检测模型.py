@@ -12,7 +12,7 @@ import os
 from datetime import datetime
 
 class 完整拟合模型:
-    def __init__(self, 文件路径, 结果目录='预处理测试/results'):
+    def __init__(self, 文件路径, 结果目录='预处理测试/results/charts'):
         # 初始化参数
         self.文件路径 = 文件路径
         self.结果目录 = 结果目录
@@ -28,8 +28,15 @@ class 完整拟合模型:
         self.随机森林树数量 = 100
 
     def 数据预处理(self):
+        # 获取当前时间
+        current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
         # 读取数据
         df = pd.read_excel(self.文件路径)
+        
+        # 划分特征和标签
+        X = df.iloc[:, :3]  # 前三列为自变量
+        y = df.iloc[:, 3:6]  # 后三列为因变量
         
         # 异常值检测
         iso_forest = IsolationForest(
@@ -37,12 +44,9 @@ class 完整拟合模型:
             contamination=self.随机森林污染比例,
             random_state=self.随机种子
         )
-        异常值索引 = iso_forest.fit_predict(df.select_dtypes(include=['number'])) == -1
-        df = df.loc[~异常值索引].copy()
-        
-        # 划分特征和标签
-        X = df.iloc[:, :3]  # 前三列为自变量
-        y = df.iloc[:, 3:6]  # 后三列为因变量
+        异常值索引 = iso_forest.fit_predict(X) == -1
+        X = X.loc[~异常值索引].copy().reset_index(drop=True)
+        y = y.loc[~异常值索引].copy().reset_index(drop=True)
         
         # 划分训练测试集
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
@@ -58,6 +62,73 @@ class 完整拟合模型:
         self.X_test_scaled = self.scaler_X.transform(self.X_test)
         self.y_train_scaled = self.scaler_y.fit_transform(self.y_train)
         self.y_test_scaled = self.scaler_y.transform(self.y_test)
+        
+        # 绘图
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d import Axes3D
+        plt.rcParams['font.sans-serif'] = ['SimHei']  # 设置中文字体
+        plt.rcParams['axes.unicode_minus'] = False  # 正常显示负号
+        
+        # 创建photos目录
+        photos_dir = os.path.join(self.结果目录, 'photos')
+        os.makedirs(photos_dir, exist_ok=True)
+        
+        # 1. 前处理前后散点图对比
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+        
+        # 前处理前
+        ax1.scatter(X.iloc[:, 0], X.iloc[:, 1], c='blue', alpha=0.5)
+        ax1.set_title('前处理前散点图')
+        ax1.set_xlabel(X.columns[0])
+        ax1.set_ylabel(X.columns[1])
+        
+        # 前处理后
+        ax2.scatter(self.X_train.iloc[:, 0], self.X_train.iloc[:, 1], c='green', alpha=0.5)
+        ax2.set_title('前处理后散点图')
+        ax2.set_xlabel(self.X_train.columns[0])
+        ax2.set_ylabel(self.X_train.columns[1])
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(photos_dir, f'随机森林_前处理对比_{current_time}.png'))
+        plt.close()
+        
+        # 2. 三维散点图（自变量为坐标，因变量为颜色）
+        for i, col in enumerate(y.columns):
+            fig = plt.figure(figsize=(8, 6))
+            ax = fig.add_subplot(111, projection='3d')
+            
+            sc = ax.scatter(
+                self.X_train.iloc[:, 0],
+                self.X_train.iloc[:, 1],
+                self.X_train.iloc[:, 2],
+                c=self.y_train[col],
+                cmap='viridis'
+            )
+            
+            ax.set_title(f'{col} 三维散点图')
+            ax.set_xlabel(self.X_train.columns[0])
+            ax.set_ylabel(self.X_train.columns[1])
+            ax.set_zlabel(self.X_train.columns[2])
+            fig.colorbar(sc, label=col)
+            
+            plt.tight_layout()
+            plt.savefig(os.path.join(photos_dir, f'随机森林_{col}_三维散点图_{current_time}.png'))
+            plt.close()
+        
+        # 3. 异常值可视化
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.scatter(
+            X.iloc[:, 0],
+            X.iloc[:, 1],
+            c='blue', alpha=0.5, label='数据点'
+        )
+        ax.set_title('异常值可视化')
+        ax.set_xlabel(X.columns[0])
+        ax.set_ylabel(X.columns[1])
+        ax.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(photos_dir, f'随机森林_异常值可视化_{current_time}.png'))
+        plt.close()
 
     def 构建模型(self):
         self.model = Sequential([
@@ -147,5 +218,5 @@ class 完整拟合模型:
 
 # 使用示例
 if __name__ == "__main__":
-    模型 = 完整拟合模型('e:/VS Code/Default path/拟合模型/第一批.xlsx')
+    模型 = 完整拟合模型('h:/VS Code/Default path/拟合模型/第一批.xlsx')
     模型.运行()

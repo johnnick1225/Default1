@@ -11,7 +11,7 @@ import os
 from datetime import datetime
 
 class 自编码器异常检测模型:
-    def __init__(self, 文件路径, 结果目录='预处理测试/results'):
+    def __init__(self, 文件路径, 结果目录='预处理测试/results/charts'):
         # 初始化参数
         self.文件路径 = 文件路径
         self.结果目录 = 结果目录
@@ -26,6 +26,9 @@ class 自编码器异常检测模型:
         self.异常值阈值 = 0.05  # 重构误差阈值
 
     def 数据预处理(self):
+        # 获取当前时间
+        current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
         # 读取数据
         df = pd.read_excel(self.文件路径)
         
@@ -34,12 +37,12 @@ class 自编码器异常检测模型:
         df = df.reset_index(drop=True)
         
         # 使用自编码器进行异常值检测
-        X = df.select_dtypes(include=['number'])
-        if X.empty:
+        X_df = df.select_dtypes(include=['number'])  # 保存原始DataFrame
+        if X_df.empty:
             raise ValueError("数据集中没有数值型数据")
             
         # 检查并转换数据类型
-        X = X.astype(np.float32).values
+        X = X_df.astype(np.float32).values  # 转换为numpy数组
         
         # 确保数据没有空值
         if np.isnan(X).any():
@@ -75,6 +78,78 @@ class 自编码器异常检测模型:
         self.X_test_scaled = self.scaler_X.transform(self.X_test)
         self.y_train_scaled = self.scaler_y.fit_transform(self.y_train)
         self.y_test_scaled = self.scaler_y.transform(self.y_test)
+        
+        # 绘图
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d import Axes3D
+        plt.rcParams['font.sans-serif'] = ['SimHei']  # 设置中文字体
+        plt.rcParams['axes.unicode_minus'] = False  # 正常显示负号
+        
+        # 创建photos目录
+        photos_dir = os.path.join(self.结果目录, 'photos')
+        os.makedirs(photos_dir, exist_ok=True)
+        
+        # 1. 前处理前后散点图对比
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+        
+        # 前处理前
+        ax1.scatter(X.iloc[:, 0], X.iloc[:, 1], c='blue', alpha=0.5)
+        ax1.set_title('前处理前散点图')
+        ax1.set_xlabel(X.columns[0])
+        ax1.set_ylabel(X.columns[1])
+        
+        # 前处理后
+        ax2.scatter(self.X_train.iloc[:, 0], self.X_train.iloc[:, 1], c='green', alpha=0.5)
+        ax2.set_title('前处理后散点图')
+        ax2.set_xlabel(self.X_train.columns[0])
+        ax2.set_ylabel(self.X_train.columns[1])
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(photos_dir, f'自编码器_前处理对比_{current_time}.png'))
+        plt.close()
+        
+        # 2. 三维散点图（自变量为坐标，因变量为颜色）
+        for i, col in enumerate(y.columns):
+            fig = plt.figure(figsize=(8, 6))
+            ax = fig.add_subplot(111, projection='3d')
+            
+            sc = ax.scatter(
+                self.X_train.iloc[:, 0],
+                self.X_train.iloc[:, 1],
+                self.X_train.iloc[:, 2],
+                c=self.y_train[col],
+                cmap='viridis'
+            )
+            
+            ax.set_title(f'{col} 三维散点图')
+            ax.set_xlabel(self.X_train.columns[0])
+            ax.set_ylabel(self.X_train.columns[1])
+            ax.set_zlabel(self.X_train.columns[2])
+            fig.colorbar(sc, label=col)
+            
+            plt.tight_layout()
+            plt.savefig(os.path.join(photos_dir, f'自编码器_{col}_三维散点图_{current_time}.png'))
+            plt.close()
+        
+        # 3. 异常值可视化
+        fig, ax = plt.subplots(figsize=(8, 6))
+        normal = ax.scatter(
+            X_df.iloc[~异常值索引, 0],
+            X_df.iloc[~异常值索引, 1],
+            c='blue', alpha=0.5, label='正常值'
+        )
+        outlier = ax.scatter(
+            X_df.iloc[异常值索引, 0],
+            X_df.iloc[异常值索引, 1],
+            c='red', s=100, alpha=0.8, label='异常值'
+        )
+        ax.set_title('异常值可视化')
+        ax.set_xlabel(X.columns[0])
+        ax.set_ylabel(X.columns[1])
+        ax.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(photos_dir, f'自编码器_异常值可视化_{current_time}.png'))
+        plt.close()
 
     def 构建自编码器(self, input_dim):
         # 编码器
@@ -179,5 +254,5 @@ class 自编码器异常检测模型:
 
 # 使用示例
 if __name__ == "__main__":
-    模型 = 自编码器异常检测模型('e:/VS Code/Default path/拟合模型/第一批.xlsx')
+    模型 = 自编码器异常检测模型('h:/VS Code/Default path/拟合模型/第一批.xlsx')
     模型.运行()

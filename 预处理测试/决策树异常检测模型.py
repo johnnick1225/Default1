@@ -56,6 +56,78 @@ class 决策树异常检测模型:
         self.X_test_scaled = self.scaler_X.transform(self.X_test)
         self.y_train_scaled = self.scaler_y.fit_transform(self.y_train)
         self.y_test_scaled = self.scaler_y.transform(self.y_test)
+        
+        # 绘图
+        import matplotlib.pyplot as plt
+        from mpl_toolkits.mplot3d import Axes3D
+        plt.rcParams['font.sans-serif'] = ['SimHei']  # 设置中文字体
+        plt.rcParams['axes.unicode_minus'] = False  # 正常显示负号
+        
+        # 创建photos目录
+        photos_dir = os.path.join(self.结果目录, 'photos')
+        os.makedirs(photos_dir, exist_ok=True)
+        
+        # 1. 前处理前后散点图对比
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+        
+        # 前处理前
+        ax1.scatter(X.iloc[:, 0], X.iloc[:, 1], c='blue', alpha=0.5)
+        ax1.set_title('前处理前散点图')
+        ax1.set_xlabel(X.columns[0])
+        ax1.set_ylabel(X.columns[1])
+        
+        # 前处理后
+        ax2.scatter(self.X_train.iloc[:, 0], self.X_train.iloc[:, 1], c='green', alpha=0.5)
+        ax2.set_title('前处理后散点图')
+        ax2.set_xlabel(self.X_train.columns[0])
+        ax2.set_ylabel(self.X_train.columns[1])
+        
+        plt.tight_layout()
+        plt.savefig(os.path.join(photos_dir, f'决策树_前处理对比_{current_time}.png'))
+        plt.close()
+        
+        # 2. 三维散点图（自变量为坐标，因变量为颜色）
+        for i, col in enumerate(y.columns):
+            fig = plt.figure(figsize=(8, 6))
+            ax = fig.add_subplot(111, projection='3d')
+            
+            sc = ax.scatter(
+                self.X_train.iloc[:, 0],
+                self.X_train.iloc[:, 1],
+                self.X_train.iloc[:, 2],
+                c=self.y_train[col],
+                cmap='viridis'
+            )
+            
+            ax.set_title(f'{col} 三维散点图')
+            ax.set_xlabel(self.X_train.columns[0])
+            ax.set_ylabel(self.X_train.columns[1])
+            ax.set_zlabel(self.X_train.columns[2])
+            fig.colorbar(sc, label=col)
+            
+            plt.tight_layout()
+            plt.savefig(os.path.join(photos_dir, f'决策树_{col}_三维散点图_{current_time}.png'))
+            plt.close()
+        
+        # 3. 异常值可视化
+        fig, ax = plt.subplots(figsize=(8, 6))
+        normal = ax.scatter(
+            X.loc[~异常值索引].iloc[:, 0],
+            X.loc[~异常值索引].iloc[:, 1],
+            c='blue', alpha=0.5, label='正常值'
+        )
+        outlier = ax.scatter(
+            X.loc[异常值索引].iloc[:, 0],
+            X.loc[异常值索引].iloc[:, 1],
+            c='red', s=100, alpha=0.8, label='异常值'
+        )
+        ax.set_title('异常值可视化')
+        ax.set_xlabel(X.columns[0])
+        ax.set_ylabel(X.columns[1])
+        ax.legend()
+        plt.tight_layout()
+        plt.savefig(os.path.join(photos_dir, f'决策树_异常值可视化_{current_time}.png'))
+        plt.close()
 
     def 构建模型(self):
         self.model = Sequential([
@@ -140,10 +212,3 @@ class 决策树异常检测模型:
     def 运行(self):
         self.数据预处理()
         self.构建模型()
-        self.训练模型()
-        self.评估模型()
-
-# 使用示例
-if __name__ == "__main__":
-    模型 = 决策树异常检测模型('e:/VS Code/Default path/拟合模型/第一批.xlsx')
-    模型.运行()
