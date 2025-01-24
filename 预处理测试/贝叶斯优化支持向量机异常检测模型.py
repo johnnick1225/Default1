@@ -10,24 +10,28 @@ from tensorflow.keras.layers import Dense
 from tensorflow.keras.callbacks import EarlyStopping
 import os
 from datetime import datetime
+from skopt import BayesSearchCV
+from skopt.space import Real, Integer, Categorical
 
-class 完整拟合模型:
-    def __init__(self, 文件路径, 结果目录='预处理测试/results/charts', SVM异常值比例=0.07):
+class 贝叶斯优化完整拟合模型:
+    def __init__(self, 文件路径, 结果目录='预处理测试/results/charts'):
         # 初始化参数
         self.文件路径 = 文件路径
         self.结果目录 = 结果目录
         os.makedirs(self.结果目录, exist_ok=True)
         
-        # 模型参数
-        self.优化器选择 = 1  # 1->Adam, 2->SGD, 3->RMSprop
-        self.最大训练轮数 = 1000
-        self.批量大小 = 93
-        self.测试集比例 = 0.2
-        self.随机种子 = 42
-        self.SVM核函数 = 'poly'  # rbf, linear, poly, sigmoid
-        self.SVM异常值比例 = SVM异常值比例
+        # 定义贝叶斯优化搜索空间
+        self.搜索空间 = {
+            '优化器选择': Integer(1, 3),
+            '最大训练轮数': Integer(100, 1000),
+            '批量大小': Integer(16, 128),
+            '测试集比例': Real(0.1, 0.3),
+            '随机种子': Integer(1, 100),
+            'SVM核函数': Categorical(['rbf', 'linear', 'poly', 'sigmoid']),
+            'SVM异常值比例': Real(0.01, 0.1)
+        }
 
-    def 数据预处理(self):
+    def 数据预处理(self, 参数):
         # 获取当前时间
         current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
         
@@ -40,8 +44,8 @@ class 完整拟合模型:
         
         # 异常值检测
         svm = OneClassSVM(
-            kernel=self.SVM核函数,
-            nu=self.SVM异常值比例
+            kernel=参数['SVM核函数'],
+            nu=参数['SVM异常值比例']
         )
         异常值索引 = svm.fit_predict(X) == -1
         # 保存原始异常值索引用于绘图
@@ -55,8 +59,8 @@ class 完整拟合模型:
         # 划分训练测试集
         self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(
             X, y,
-            test_size=self.测试集比例,
-            random_state=self.随机种子
+            test_size=参数['测试集比例'],
+            random_state=参数['随机种子']
         )
         
         # 数据标准化
@@ -66,86 +70,8 @@ class 完整拟合模型:
         self.X_test_scaled = self.scaler_X.transform(self.X_test)
         self.y_train_scaled = self.scaler_y.fit_transform(self.y_train)
         self.y_test_scaled = self.scaler_y.transform(self.y_test)
-        
-        # 绘图
-        import matplotlib.pyplot as plt
-        from mpl_toolkits.mplot3d import Axes3D
-        plt.rcParams['font.sans-serif'] = ['SimHei']  # 设置中文字体
-        plt.rcParams['axes.unicode_minus'] = False  # 正常显示负号
-        
-        # 设置图片保存目录
-        photos_dir = 'H:/VS Code/Default path/预处理测试/results/photos'
-        os.makedirs(photos_dir, exist_ok=True)
-        
-        # 1. 前处理前后散点图对比
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
-        
-        # 读取原始数据用于绘图
-        df_original = pd.read_excel(self.文件路径)
-        X_original = df_original.iloc[:, :3]
-        
-        # 前处理前
-        ax1.scatter(X_original.iloc[:, 0], X_original.iloc[:, 1], c='blue', alpha=0.5)
-        ax1.scatter(X_original.iloc[self.原始异常值索引, 0], X_original.iloc[self.原始异常值索引, 1],
-                   c='red', marker='x', s=100, alpha=0.8)
-        ax1.set_title('前处理前散点图')
-        ax1.set_xlabel(X_original.columns[0])
-        ax1.set_ylabel(X_original.columns[1])
-        
-        # 前处理后
-        ax2.scatter(self.X_train.iloc[:, 0], self.X_train.iloc[:, 1], c='green', alpha=0.5)
-        ax2.set_title('前处理后散点图')
-        ax2.set_xlabel(self.X_train.columns[0])
-        ax2.set_ylabel(self.X_train.columns[1])
-        
-        plt.tight_layout()
-        plt.savefig(os.path.join(photos_dir, f'支持向量机sigmoid异常值比例{self.SVM异常值比例}前处理对比_{current_time}.png'))
-        plt.close()
-        
-        
-        # 2. 三个因变量的三维散点图
-        fig = plt.figure(figsize=(18, 6))
-        
-        # 读取原始数据用于绘图
-        df_original = pd.read_excel(self.文件路径)
-        X_original = df_original.iloc[:, :3]
-        y_original = df_original.iloc[:, 3:6]
-        
-        # 定义不同颜色映射
-        cmaps = ['viridis', 'plasma', 'inferno']
-        
-        for i, col in enumerate(y_original.columns):
-            ax = fig.add_subplot(1, 3, i+1, projection='3d')
-            
-            # 绘制所有点（包括异常值）
-            sc = ax.scatter(
-                X_original.iloc[:, 0],
-                X_original.iloc[:, 1],
-                X_original.iloc[:, 2],
-                c=y_original[col],
-                cmap=cmaps[i],
-                alpha=0.5
-            )
-            
-            # 用红叉标注异常值
-            ax.scatter(
-                X_original.iloc[self.原始异常值索引, 0],
-                X_original.iloc[self.原始异常值索引, 1],
-                X_original.iloc[self.原始异常值索引, 2],
-                c='red', marker='x', s=100, alpha=0.8
-            )
-            
-            ax.set_title(f'{col} 三维散点图（含异常值）')
-            ax.set_xlabel(X_original.columns[0])
-            ax.set_ylabel(X_original.columns[1])
-            ax.set_zlabel(X_original.columns[2])
-            fig.colorbar(sc, label=col)
-            
-        plt.tight_layout()
-        plt.savefig(os.path.join(photos_dir, f'支持向量机sigmoid异常值比例{self.SVM异常值比例}三维散点图_{current_time}.png'))
-        plt.close()
 
-    def 构建模型(self):
+    def 构建模型(self, 参数):
         self.model = Sequential([
             Dense(64, input_dim=self.X_train_scaled.shape[1], activation='relu'),
             Dense(32, activation='relu'),
@@ -153,12 +79,12 @@ class 完整拟合模型:
         ])
         
         # 设置优化器
-        if self.优化器选择 == 1:
+        if 参数['优化器选择'] == 1:
             optimizer = 'adam'
-        elif self.优化器选择 == 2:
+        elif 参数['优化器选择'] == 2:
             from tensorflow.keras.optimizers import SGD
             optimizer = SGD(learning_rate=0.01)
-        elif self.优化器选择 == 3:
+        elif 参数['优化器选择'] == 3:
             from tensorflow.keras.optimizers import RMSprop
             optimizer = RMSprop(learning_rate=0.01)
         else:
@@ -166,12 +92,12 @@ class 完整拟合模型:
         
         self.model.compile(optimizer=optimizer, loss='mse')
 
-    def 训练模型(self):
+    def 训练模型(self, 参数):
         early_stopping = EarlyStopping(monitor='loss', patience=10, restore_best_weights=True)
         self.history = self.model.fit(
             self.X_train_scaled, self.y_train_scaled,
-            epochs=self.最大训练轮数,
-            batch_size=self.批量大小,
+            epochs=参数['最大训练轮数'],
+            batch_size=参数['批量大小'],
             verbose=1,
             callbacks=[early_stopping]
         )
@@ -194,16 +120,74 @@ class 完整拟合模型:
         self.测试集指标 = {col: 计算指标(self.y_test[col], self.y_test_pred[:, i]) 
                         for i, col in enumerate(self.y_test.columns)}
         
-        # 保存结果
+        # 返回测试集平均RMSE作为优化目标
+        return np.mean([v['RMSE'] for v in self.测试集指标.values()])
+
+    def 目标函数(self, 参数):
+        self.数据预处理(参数)
+        self.构建模型(参数)
+        self.训练模型(参数)
+        return self.评估模型()
+
+    def 运行(self):
+        from skopt import gp_minimize
+        from skopt.utils import use_named_args
+
+        # 将搜索空间转换为带名称的列表格式
+        搜索空间列表 = [
+            Integer(1, 3, name='优化器选择'),
+            Integer(100, 1000, name='最大训练轮数'),
+            Integer(16, 128, name='批量大小'),
+            Real(0.1, 0.3, name='测试集比例'),
+            Integer(1, 100, name='随机种子'),
+            Categorical(['rbf', 'linear', 'poly', 'sigmoid'], name='SVM核函数'),
+            Real(0.01, 0.1, name='SVM异常值比例')
+        ]
+
+        # 定义目标函数
+        @use_named_args(搜索空间列表)
+        def 目标函数包装器(**参数):
+            return self.目标函数(参数)
+
+        # 运行贝叶斯优化
+        优化结果 = gp_minimize(
+            目标函数包装器,
+            搜索空间列表,
+            n_calls=50,
+            random_state=42,
+            verbose=True
+        )
+
+        # 保存最佳参数
+        self.最佳参数 = {
+            '优化器选择': 优化结果.x[0],
+            '最大训练轮数': 优化结果.x[1],
+            '批量大小': 优化结果.x[2],
+            '测试集比例': 优化结果.x[3],
+            '随机种子': 优化结果.x[4],
+            'SVM核函数': 优化结果.x[5],
+            'SVM异常值比例': 优化结果.x[6]
+        }
+
+        # 使用最佳参数重新训练模型
+        self.数据预处理(self.最佳参数)
+        self.构建模型(self.最佳参数)
+        self.训练模型(self.最佳参数)
+        self.评估模型()
+
+        # 保存最佳参数和结果
         self.保存结果()
 
     def 保存结果(self):
         # 保存评价指标
         current_time = datetime.now().strftime('%Y%m%d_%H%M%S')
-        result_path = os.path.join(self.结果目录, f'支持向量机sigmoid_异常值比例{self.SVM异常值比例}_{current_time}.csv')
+        result_path = os.path.join(self.结果目录, f'贝叶斯优化支持向量机_{current_time}.csv')
         
         metrics = []
-        metrics.append([f"异常值比例: {self.SVM异常值比例}"])
+        metrics.append(["最佳参数"])
+        for k, v in self.最佳参数.items():
+            metrics.append([f"{k}: {v}"])
+        
         metrics.append([])
         metrics.append(["训练集指标"])
         for col in self.y_train.columns:
@@ -225,15 +209,9 @@ class 完整拟合模型:
             ])
         
         pd.DataFrame(metrics).to_csv(result_path, index=False, header=False)
-        print(f"训练和测试结果已保存到: {result_path}")
-
-    def 运行(self):
-        self.数据预处理()
-        self.构建模型()
-        self.训练模型()
-        self.评估模型()
+        print(f"贝叶斯优化结果已保存到: {result_path}")
 
 # 使用示例
 if __name__ == "__main__":
-    模型 = 完整拟合模型('拟合模型/第一批.xlsx')
+    模型 = 贝叶斯优化完整拟合模型('拟合模型/第一批.xlsx')
     模型.运行()
